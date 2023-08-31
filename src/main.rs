@@ -1,7 +1,8 @@
-use nordic_engine::core::app::App;
+use nordic_engine::core::window::Window;
 
-fn main() {
-    let app = App::new();
+#[tokio::main]
+async fn main() {
+    let window = Window::new();
 
-    app.run();
+    window.run().await;
 }
