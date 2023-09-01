@@ -1,7 +1,7 @@
 use log::debug;
 use rand::Rng;
 use wgpu::Color;
-use winit::event::{WindowEvent, ElementState, MouseButton};
+use winit::event::{ElementState, MouseButton, WindowEvent};
 
 use super::window::Window;
 
@@ -12,6 +12,7 @@ pub struct Render {
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     color: Color,
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl Render {
@@ -79,11 +80,58 @@ impl Render {
         };
         surface.configure(&device, &config);
 
+        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
+                conservative: false,
+            },
+            depth_stencil: None, // 1.
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+
         let init_color = Color {
-          r: 0.1,
-          g: 0.2,
-          b: 0.3,
-          a: 1.0,
+            r: 0.1,
+            g: 0.2,
+            b: 0.3,
+            a: 1.0,
         };
 
         Self {
@@ -92,7 +140,8 @@ impl Render {
             queue,
             config,
             size,
-            color: init_color
+            render_pipeline,
+            color: init_color,
         }
     }
 
@@ -109,19 +158,23 @@ impl Render {
         let mut rng = rand::thread_rng();
 
         match event {
-          WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
-            debug!("Left mouse button pressed");
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                debug!("Left mouse button pressed");
 
-            self.color = Color {
-              r: rng.gen(),
-              g: rng.gen(),
-              b: rng.gen(),
-              a: 1.0
-            };
+                self.color = Color {
+                    r: rng.gen(),
+                    g: rng.gen(),
+                    b: rng.gen(),
+                    a: 1.0,
+                };
 
-            return true;
-          }
-          _ => {}
+                return true;
+            }
+            _ => {}
         }
 
         false
@@ -143,7 +196,7 @@ impl Render {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -155,6 +208,9 @@ impl Render {
                 })],
                 depth_stencil_attachment: None,
             });
+
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         // submit will accept anything that implements IntoIter

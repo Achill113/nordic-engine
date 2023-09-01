@@ -14,7 +14,7 @@ impl App {
     pub fn new() -> Self {
         let window = Window::new();
 
-        Self { window: window }
+        Self { window }
     }
 
     pub async fn run(self) {
