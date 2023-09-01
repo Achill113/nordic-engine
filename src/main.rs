@@ -1,6 +1,6 @@
 use dotenv::dotenv;
 use log::info;
-use nordic_engine::core::{app::App, window::Window};
+use nordic_engine::core::app::App;
 
 #[tokio::main]
 async fn main() {
@@ -15,8 +15,4 @@ async fn main() {
     let app = App::new();
 
     app.run().await;
-
-    // let window = Window::new();
-
-    // window.run();
 }

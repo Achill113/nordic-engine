@@ -7,9 +7,17 @@ use winit::{
 
 use crate::{exit_event, keyboard_event, mouse_event};
 
+use super::render::Render;
+
 pub struct Window {
     event_loop: Option<EventLoop<()>>,
-    window: winit::window::Window,
+    pub window: winit::window::Window,
+}
+
+impl Default for Window {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Window {
@@ -22,11 +30,11 @@ impl Window {
 
         Self {
             event_loop: Some(event_loop),
-            window: window,
+            window,
         }
     }
 
-    pub fn run(mut self) -> () {
+    pub fn run(mut self, mut render: Render) {
         let win_id = self.window.id();
 
         self.event_loop
@@ -39,8 +47,8 @@ impl Window {
                     Event::WindowEvent {
                         ref event,
                         window_id,
-                    } => {
-                        if window_id == win_id {
+                    } if window_id == win_id => {
+                        if !render.input(event) {
                             match event {
                                 exit_event!() => {
                                     debug!("Exit");
@@ -57,6 +65,24 @@ impl Window {
                                 _ => {}
                             }
                         }
+                    }
+                    Event::RedrawRequested(window_id) if window_id == win_id => {
+                        debug!("Redraw");
+                        render.update();
+                        match render.render() {
+                            Ok(_) => {}
+                            // Reconfigure the surface if lost
+                            Err(wgpu::SurfaceError::Lost) => render.resize(render.size),
+                            // The system is out of memory, we should probably quit
+                            Err(wgpu::SurfaceError::OutOfMemory) => {
+                                *control_flow = ControlFlow::Exit
+                            }
+                            // All other errors (Outdated, Timeout) should be resolved by the next frame
+                            Err(e) => eprintln!("{:?}", e),
+                        }
+                    }
+                    Event::MainEventsCleared => {
+                        self.window.request_redraw();
                     }
                     _ => {}
                 }
