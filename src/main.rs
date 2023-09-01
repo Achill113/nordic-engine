@@ -1,8 +1,22 @@
-use nordic_engine::core::window::Window;
+use dotenv::dotenv;
+use log::info;
+use nordic_engine::core::{app::App, window::Window};
 
 #[tokio::main]
 async fn main() {
-    let window = Window::new();
+    if cfg!(debug_assertions) {
+        dotenv().ok();
+    }
 
-    window.run().await;
+    env_logger::init();
+
+    info!("Starting application");
+
+    let app = App::new();
+
+    app.run().await;
+
+    // let window = Window::new();
+
+    // window.run();
 }
