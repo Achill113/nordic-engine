@@ -54,6 +54,12 @@ impl Window {
                                     debug!("Exit");
                                     *control_flow = ControlFlow::Exit;
                                 }
+                                WindowEvent::Resized(physical_size) => {
+                                    render.resize(*physical_size);
+                                }
+                                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                                    render.resize(**new_inner_size);
+                                }
                                 mouse_event!() => {
                                     debug!("Mouse Event");
                                     debug!("{:?}", event);

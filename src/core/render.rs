@@ -1,9 +1,26 @@
 use log::debug;
 use rand::Rng;
+use wgpu::util::DeviceExt;
 use wgpu::Color;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 
-use super::window::Window;
+use super::{vertex::Vertex, window::Window};
+
+#[rustfmt::skip]
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.5, 0.0, 0.5] },
+];
+
+#[rustfmt::skip]
+const INDICES: &[u16] = &[
+  0, 1, 4,
+  1, 2, 4,
+  2, 3, 4
+];
 
 pub struct Render {
     surface: wgpu::Surface,
@@ -13,6 +30,13 @@ pub struct Render {
     pub size: winit::dpi::PhysicalSize<u32>,
     color: Color,
     render_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
+    challenge_vertex_buffer: wgpu::Buffer,
+    challenge_index_buffer: wgpu::Buffer,
+    num_challenge_indices: u32,
+    use_complex: bool,
 }
 
 impl Render {
@@ -95,7 +119,7 @@ impl Render {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -134,6 +158,53 @@ impl Render {
             a: 1.0,
         };
 
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = INDICES.len() as u32;
+
+        let num_vertices = 16;
+        let angle = std::f32::consts::PI * 2.0 / num_vertices as f32;
+        let challenge_verts = (0..num_vertices)
+            .map(|i| {
+                let theta = angle * i as f32;
+                Vertex {
+                    position: [0.5 * theta.cos(), -0.5 * theta.sin(), 0.0],
+                    color: [(1.0 + theta.cos()) / 2.0, (1.0 + theta.sin()) / 2.0, 1.0],
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let num_triangles = num_vertices - 2;
+        let challenge_indices = (1u16..num_triangles + 1)
+            .into_iter()
+            .flat_map(|i| vec![i + 1, i, 0])
+            .collect::<Vec<_>>();
+        let num_challenge_indices = challenge_indices.len() as u32;
+
+        let challenge_vertex_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Challenge Vertex Buffer"),
+                contents: bytemuck::cast_slice(&challenge_verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let challenge_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Challenge Index Buffer"),
+            contents: bytemuck::cast_slice(&challenge_indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let use_complex = false;
+
         Self {
             surface,
             device,
@@ -142,6 +213,13 @@ impl Render {
             size,
             render_pipeline,
             color: init_color,
+            vertex_buffer,
+            index_buffer,
+            num_indices,
+            challenge_vertex_buffer,
+            challenge_index_buffer,
+            num_challenge_indices,
+            use_complex,
         }
     }
 
@@ -174,10 +252,23 @@ impl Render {
 
                 return true;
             }
-            _ => {}
-        }
+            WindowEvent::KeyboardInput {
+                input:
+                    winit::event::KeyboardInput {
+                        virtual_keycode: Some(winit::event::VirtualKeyCode::Space),
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => {
+                debug!("Spacebar pressed");
 
-        false
+                self.use_complex = !self.use_complex;
+
+                return true;
+            }
+            _ => false
+        }
     }
 
     pub fn update(&mut self) {}
@@ -210,7 +301,20 @@ impl Render {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+
+            let data = if self.use_complex {
+                (
+                    &self.challenge_vertex_buffer,
+                    &self.challenge_index_buffer,
+                    self.num_challenge_indices,
+                )
+            } else {
+                (&self.vertex_buffer, &self.index_buffer, self.num_indices)
+            };
+
+            render_pass.set_vertex_buffer(0, data.0.slice(..));
+            render_pass.set_index_buffer(data.1.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..data.2, 0, 0..1);
         }
 
         // submit will accept anything that implements IntoIter
