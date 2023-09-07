@@ -1,7 +1,6 @@
 use cgmath::prelude::*;
-use image::DynamicImage;
 use wgpu::Color;
-use wgpu::{util::DeviceExt, BindGroup};
+use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
 
 use crate::core::resources;
@@ -24,8 +23,6 @@ pub struct Render {
     pub size: winit::dpi::PhysicalSize<u32>,
     color: Color,
     render_pipeline: wgpu::RenderPipeline,
-    diffuse_bind_group: Option<wgpu::BindGroup>,
-    pub diffuse_texture: Option<texture::Texture>,
     pub camera: Camera,
     pub camera_controller: CameraController,
     pub camera_uniform: CameraUniform,
@@ -38,7 +35,7 @@ pub struct Render {
 }
 
 impl Render {
-    pub async fn new(window: &Window, texture: Option<&DynamicImage>) -> Self {
+    pub async fn new(window: &Window) -> Self {
         let size = window.window.inner_size();
 
         // The instance is a handle to our GPU
@@ -102,13 +99,6 @@ impl Render {
         };
         surface.configure(&device, &config);
 
-        let mut diffuse_texture: Option<Texture> = None;
-        if let Some(image) = texture {
-            diffuse_texture = Some(
-                texture::Texture::from_image(&device, &queue, image, Some("image-texture"))
-                    .unwrap(),
-            );
-        }
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -133,25 +123,6 @@ impl Render {
                 ],
                 label: Some("texture_bind_group_layout"),
             });
-
-        let mut diffuse_bind_group: Option<BindGroup> = None;
-
-        if let Some(diffuse_texture) = &diffuse_texture {
-            diffuse_bind_group = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                    },
-                ],
-                label: Some("diffuse_bind_group"),
-            }));
-        }
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
@@ -304,8 +275,6 @@ impl Render {
             size,
             render_pipeline,
             color: init_color,
-            diffuse_bind_group,
-            diffuse_texture,
             camera,
             camera_controller,
             camera_uniform,
