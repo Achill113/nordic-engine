@@ -12,8 +12,15 @@ tokio = { version = "1.32.0", features = ["full"] }
 wgpu = "0.17.0"
 winit = "0.28.6"
 bytemuck = { version = "1.12", features = [ "derive" ] }
-anyhow = "1.0.75"
+anyhow = "1.0"
 cgmath = "0.18.0"
+tobj = { version = "4.0.0", features = ["async"] }
+cfg-if = "1.0.0"
+
+[build-dependencies]
+anyhow = "1.0"
+fs_extra = "1.2"
+glob = "0.3"
 
 [dependencies.image]
 version = "0.24"

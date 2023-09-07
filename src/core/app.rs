@@ -22,7 +22,7 @@ impl App {
     }
 
     pub async fn run(self) {
-        let path = Path::new("C:\\Users\\achil\\Projects\\nordic-engine\\assets\\happy-tree.png");
+        let path = Path::new("res/happy-tree.png");
         debug!("{:?}", path);
 
         let image_result = ImageReader::open(path).expect("Failed to open image.").decode();
