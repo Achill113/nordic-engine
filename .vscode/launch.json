@@ -5,6 +5,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "command": "cargo run",
+      "name": "Cargo Run",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "cargo test",
+      "name": "Cargo Test",
+      "request": "launch",
+      "type": "node-terminal"
+    }
+    {
       "type": "lldb",
       "request": "launch",
       "name": "Debug unit tests in library 'nordic-engine'",
