@@ -1,14 +1,24 @@
+use cgmath::prelude::*;
 use image::DynamicImage;
-use wgpu::{util::DeviceExt, BindGroup};
 use wgpu::Color;
+use wgpu::{util::DeviceExt, BindGroup};
 use winit::event::WindowEvent;
 
+use super::instance::{Instance, InstanceRaw};
 use super::{
     camera::{camera::Camera, camera_controller::CameraController, camera_uniform::CameraUniform},
     texture::{self, Texture},
     vertex::Vertex,
     window::Window,
 };
+
+const NUM_INSTANCES_PER_ROW: u32 = 10;
+const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
+    NUM_INSTANCES_PER_ROW as f32 * 0.5,
+    0.0,
+    NUM_INSTANCES_PER_ROW as f32 * 0.5,
+);
+const ROTATION_SPEED: f32 = 2.0 * std::f32::consts::PI / 60.0;
 
 #[rustfmt::skip]
 const VERTICES: &[Vertex] = &[
@@ -44,6 +54,8 @@ pub struct Render {
     pub camera_uniform: CameraUniform,
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
 }
 
 impl Render {
@@ -113,10 +125,11 @@ impl Render {
 
         let mut diffuse_texture: Option<Texture> = None;
         if let Some(image) = texture {
-            let diffuse_bytes = image.as_bytes();
-            diffuse_texture =
-                Some(texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap());
-        }    
+            diffuse_texture = Some(
+                texture::Texture::from_image(&device, &queue, image, Some("image-texture"))
+                    .unwrap(),
+            );
+        }
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -219,7 +232,7 @@ impl Render {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), InstanceRaw::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -274,6 +287,37 @@ impl Render {
 
         let camera_controller = CameraController::new(0.2);
 
+        let instances = (0..NUM_INSTANCES_PER_ROW)
+            .flat_map(|z| {
+                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                    let position = cgmath::Vector3 {
+                        x: x as f32,
+                        y: 0.0,
+                        z: z as f32,
+                    } - INSTANCE_DISPLACEMENT;
+
+                    let rotation = if position.is_zero() {
+                        // this is needed so an object at (0, 0, 0) won't get scaled to zero
+                        // as Quaternions can effect scale if they're not created correctly
+                        cgmath::Quaternion::from_axis_angle(
+                            cgmath::Vector3::unit_z(),
+                            cgmath::Deg(0.0),
+                        )
+                    } else {
+                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                    };
+
+                    Instance { position, rotation }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
 
         Self {
             surface,
@@ -293,6 +337,8 @@ impl Render {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            instances,
+            instance_buffer,
         }
     }
 
@@ -354,8 +400,9 @@ impl Render {
 
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
         }
 
         // submit will accept anything that implements IntoIter

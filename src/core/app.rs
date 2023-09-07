@@ -25,7 +25,7 @@ impl App {
         let path = Path::new("C:\\Users\\achil\\Projects\\nordic-engine\\assets\\happy-tree.png");
         debug!("{:?}", path);
 
-        let image_result = ImageReader::open(path).unwrap().decode();
+        let image_result = ImageReader::open(path).expect("Failed to open image.").decode();
 
         let mut image: Option<DynamicImage> = None;
         if let Ok(img) = image_result {
