@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{render::Render, window::Window, texture};
+use super::{render::Render, window::Window};
 use image::{io::Reader as ImageReader, DynamicImage};
 use log::debug;
 
